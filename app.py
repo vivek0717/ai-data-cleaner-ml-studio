@@ -235,13 +235,55 @@ def drop_column_by_name(df, column_name):
     return cleaned_df, f"Column '{column_name}' was not found."
 
 
-def fill_missing_text_with_unknown(df):
+def fill_missing_text_with_mode(df):
     cleaned_df = df.copy()
-    text_columns = cleaned_df.select_dtypes(include="object").columns
-    if len(text_columns) > 0:
-        cleaned_df[text_columns] = cleaned_df[text_columns].fillna("Unknown")
-    return cleaned_df, "Filled missing values in text columns with 'Unknown'."
 
+    text_columns = cleaned_df.select_dtypes(
+        include=["object", "string", "category"]
+    ).columns
+
+    filled_columns = []
+    skipped_columns = []
+
+    for col in text_columns:
+        missing_count = int(cleaned_df[col].isna().sum())
+
+        if missing_count == 0:
+            continue
+
+        mode_values = cleaned_df[col].mode(dropna=True)
+
+        if not mode_values.empty:
+            fill_value = mode_values.iloc[0]
+            cleaned_df[col] = cleaned_df[col].fillna(fill_value)
+            filled_columns.append(
+                f"{col} ({missing_count} filled with '{fill_value}')"
+            )
+        else:
+            skipped_columns.append(
+                f"{col} (all values are missing)"
+            )
+
+    message_parts = []
+
+    if filled_columns:
+        message_parts.append(
+            "Filled missing text values using each column's most frequent "
+            f"value (mode): {'; '.join(filled_columns)}."
+        )
+
+    if skipped_columns:
+        message_parts.append(
+            "Skipped columns with no available non-missing value: "
+            f"{', '.join(skipped_columns)}."
+        )
+
+    if not message_parts:
+        message_parts.append(
+            "No missing values were found in text, string, or category columns."
+        )
+
+    return cleaned_df, " ".join(message_parts)
 
 def fill_missing_numeric_with_median(df):
     cleaned_df = df.copy()
@@ -441,7 +483,7 @@ def run_actions_from_plan(df, plan):
         elif action == "drop_column":
             working_df, msg = drop_column_by_name(working_df, item.get("column_name", ""))
         elif action == "fill_text_missing":
-            working_df, msg = fill_missing_text_with_unknown(working_df)
+            working_df, msg = fill_missing_text_with_mode(working_df)
         elif action == "fill_numeric_missing":
             working_df, msg = fill_missing_numeric_with_median(working_df)
         elif action == "drop_rows_many_missing":
@@ -469,7 +511,7 @@ def make_plan_readable(plan):
         elif action == "drop_column":
             readable_actions.append(f"Drop column: {item.get('column_name', 'selected column')}")
         elif action == "fill_text_missing":
-            readable_actions.append("Fill missing text values with 'Unknown'")
+            readable_actions.append("Fill missing text values using the most frequent value (mode)")
         elif action == "fill_numeric_missing":
             readable_actions.append("Fill missing numeric values with the median")
         elif action == "drop_rows_many_missing":
@@ -504,7 +546,7 @@ def suggest_cleaning_actions(df):
     if any(" " in col or col != col.strip() or col.lower() != col for col in df.columns):
         suggestions.append("Standardize column names.")
     if len(text_columns) > 0 and df[text_columns].isna().sum().sum() > 0:
-        suggestions.append("Fill missing text values with 'Unknown'.")
+       suggestions.append("Fill missing text values using the most frequent value (mode).")
     if len(numeric_columns) > 0 and df[numeric_columns].isna().sum().sum() > 0:
         suggestions.append("Fill missing numeric values with median.")
     if (df.isna().mean(axis=1) * 100 >= 50).any():
@@ -748,7 +790,7 @@ if uploaded_file is not None:
                     "Trim Extra Spaces in Text",
                     "Standardize Text Case",
                     "Standardize Column Names",
-                    "Fill Text Missing With Unknown",
+                    "Fill Text Missing With Mode",
                     "Fill Numeric Missing With Median",
                     "Remove Rows With Many Missing Values"
                 ]
@@ -770,8 +812,8 @@ if uploaded_file is not None:
                             working_df, msg = standardize_text_case(working_df)
                         elif action == "Standardize Column Names":
                             working_df, msg = standardize_column_names(working_df)
-                        elif action == "Fill Text Missing With Unknown":
-                            working_df, msg = fill_missing_text_with_unknown(working_df)
+                        elif action == "Fill Text Missing With Mode":
+                            working_df, msg = fill_missing_text_with_mode(working_df)
                         elif action == "Fill Numeric Missing With Median":
                             working_df, msg = fill_missing_numeric_with_median(working_df)
                         elif action == "Remove Rows With Many Missing Values":

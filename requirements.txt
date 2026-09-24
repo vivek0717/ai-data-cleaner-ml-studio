@@ -1,6 +1,12 @@
 streamlit
 pandas
+numpy
+openpyxl
+xlsxwriter
+xlrd
+pyxlsb
+odfpy
 google-genai
 matplotlib
 seaborn
-scikit-learn    
+scikit-learn
